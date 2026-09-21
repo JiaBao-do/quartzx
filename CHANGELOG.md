@@ -4,6 +4,8 @@ All notable changes are documented here. Format: [Keep a Changelog](https://keep
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-21
+
 ### Added
 - Quartz-compatible cron parser (`ParseCron`) with seconds, `? L W #`, `L-n`, `LW`, year field, names and descriptors.
 - Injectable `Clock` with a deterministic `FakeClock`.

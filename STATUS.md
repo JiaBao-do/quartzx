@@ -2,7 +2,7 @@
 
 | stage | attempts | updated | evidence |
 |-------|----------|---------|----------|
-| validated (PARTIAL gap) | 0 | 2026-09-21 | Step 0 done, see below. Building. |
+| tagged v0.1.0 | 0 | 2026-09-21 | Built by agent quartzx-builder. Gate: gofmt, tidy, vet, test -race -shuffle (root 95.2% coverage), bench, fuzz 20s, golangci-lint 0 issues, govulncheck clean; CI green on 3 OS x (1.24, stable) at 8fe8473. Commits: d21c4d1 04de440 dfaf717 ac33794 8fe8473. |
 
 ## Step 0 evidence (2026-09-21)
 
