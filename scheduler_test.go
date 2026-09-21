@@ -951,3 +951,24 @@ func TestCalendarCanExhaustATrigger(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// TestCompletedEventMeansNotRunning is a regression test: reacting to the
+// Completed event by firing the next tick must never count as an overlap.
+func TestCompletedEventMeansNotRunning(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, t0)
+	h.s.RegisterFunc("h", noop)
+	h.start()
+	tr := mustTrig(t)(Cron("*/10 * * * * ?"))
+	if err := h.s.Schedule(context.Background(), JobSpec{Key: "j", Handler: "h", Trigger: tr}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 200; i++ {
+		h.fc.BlockUntilTimers(1)
+		h.fc.Set(t0.Add(time.Duration(i) * 10 * time.Second))
+		h.next(EventCompleted, "j")
+	}
+	if n := countType(h.drain(), EventSkipped); n != 0 {
+		t.Fatalf("%d spurious overlap skips", n)
+	}
+}

@@ -681,6 +681,10 @@ func (s *Scheduler) finishLocked(e *entry, b *batch) {
 
 func (s *Scheduler) runJob(rs *runState, e *entry, job Job, items []fireItem) {
 	defer rs.wg.Done()
+	// The terminal event of the last run is emitted only after the job is no
+	// longer marked running, so a listener that reacts to it (a test advancing
+	// a fake clock) never races with the overlap check.
+	var final *Event
 	defer func() {
 		var b batch
 		s.mu.Lock()
@@ -693,6 +697,9 @@ func (s *Scheduler) runJob(rs *runState, e *entry, job Job, items []fireItem) {
 			if err := s.store.Delete(context.Background(), k); err != nil {
 				s.emit(Event{Type: EventError, Key: k, Err: fmt.Errorf("quartzx: delete job: %w", err)})
 			}
+		}
+		if final != nil {
+			s.emit(*final)
 		}
 		for _, ev := range b.events {
 			s.emit(ev)
@@ -708,9 +715,16 @@ func (s *Scheduler) runJob(rs *runState, e *entry, job Job, items []fireItem) {
 		}
 	}
 	key := e.rec.Key
-	for _, it := range items {
+	for i, it := range items {
 		if rs.jobCtx.Err() != nil {
 			return
+		}
+		terminal := func(ev Event) {
+			if i == len(items)-1 {
+				final = &ev
+				return
+			}
+			s.emit(ev)
 		}
 		s.mu.Lock()
 		data := maps.Clone(e.rec.Data)
@@ -722,7 +736,7 @@ func (s *Scheduler) runJob(rs *runState, e *entry, job Job, items []fireItem) {
 		s.emit(Event{Type: EventFired, Key: key, ScheduledFor: it.at})
 		err := s.call(rs.jobCtx, job, exec, e.timeout)
 		if err != nil {
-			s.emit(Event{Type: EventFailed, Key: key, ScheduledFor: it.at, Err: err})
+			terminal(Event{Type: EventFailed, Key: key, ScheduledFor: it.at, Err: err})
 			continue
 		}
 		if persist {
@@ -740,7 +754,7 @@ func (s *Scheduler) runJob(rs *runState, e *entry, job Job, items []fireItem) {
 				}
 			}
 		}
-		s.emit(Event{Type: EventCompleted, Key: key, ScheduledFor: it.at})
+		terminal(Event{Type: EventCompleted, Key: key, ScheduledFor: it.at})
 	}
 }
 
