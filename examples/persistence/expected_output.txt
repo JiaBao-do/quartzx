@@ -1,0 +1,7 @@
+process 1: run #1 for 09:00 misfired=false reports=1
+process 1: run #2 for 10:00 misfired=false reports=2
+misfire: 3 fires missed since 11:00, policy fire-all
+process 2: run #3 for 11:00 misfired=true reports=3
+process 2: run #4 for 12:00 misfired=true reports=4
+process 2: run #5 for 13:00 misfired=true reports=5
+next fire: 14:00 total fires: 5

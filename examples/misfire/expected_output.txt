@@ -1,0 +1,4 @@
+fire-now   runs=[09:00] next=14:00
+skip       runs=[] next=14:00
+reschedule runs=[09:00] next=14:30
+fire-all   runs=[09:00 10:00 11:00 12:00 13:00] next=14:00

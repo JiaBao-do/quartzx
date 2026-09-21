@@ -1,0 +1,7 @@
+paused heartbeat at Feb 10 00:00
+resumed: heartbeat misfired, 1 missed since Feb 10 12:00, policy skip
+billing dates: [2026-01-31 2026-02-28]
+billing   fires=2   next=Mar 31 09:00
+heartbeat fires=56  next=Mar 1 12:00
+report    fires=30  next=Mar 1 02:00
+reports sent (persisted job data): 30
