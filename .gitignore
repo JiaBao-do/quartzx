@@ -1,0 +1,22 @@
+# Build and test output
+*.test
+*.out
+cover.out
+coverage.html
+/bin/
+
+# Local job store files
+*.jobs.json
+*.jobs.json.tmp-*
+
+# Secrets and local config
+.env
+.env.*
+*.pem
+*.key
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
