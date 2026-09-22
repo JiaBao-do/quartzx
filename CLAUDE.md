@@ -15,7 +15,10 @@ ecosystem; go-quartz and gocron cover basic scheduling, see README for the hones
 ## Architecture
 - `cron.go`: CronSchedule parser and DST-aware `Next` (civil-time iteration, bitsets).
 - `trigger.go`: Trigger/TriggerSpec (cron, interval, calendar-interval, once); `calendar.go`: exclusion calendars.
-- `clock.go`: Clock, SystemClock, FakeClock (BlockUntilTimers/Advance/Set).
+- `clock.go`: Clock, SystemClock, FakeClock (BlockUntilTimers/Advance/Set). `NewTimerAt(t)` decides "already due" and
+  "arm relative to now" as one atomic clock read; `Scheduler.loop` uses it (not a separate `Now()` + `NewTimer(d)`) so
+  arming a timer can never straddle a concurrent Set/Advance. Added as defensive hardening after a single unreproduced
+  CI deadlock — see STATUS.md and oss/LEARNINGS.md before touching loop()'s arming logic.
 - `store.go` / `filestore.go`: Store interface, JobRecord, MemoryStore, atomic JSON FileStore.
 - `job.go`: Job, JobSpec, Execution, events/listeners. `scheduler.go`: single loop goroutine; `processDue` (under lock)
   computes misfires/dispatches, persistence and events happen after unlock; `runJob` per dispatch.

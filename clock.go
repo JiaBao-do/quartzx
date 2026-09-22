@@ -13,6 +13,13 @@ type Clock interface {
 	Now() time.Time
 	// NewTimer returns a timer that fires once after d.
 	NewTimer(d time.Duration) Timer
+	// NewTimerAt returns a timer that fires at t, or immediately if t is not
+	// after Now. Implementations must decide "already due" and "arm relative
+	// to the current time" as a single atomic operation with respect to Now,
+	// so a caller never has to combine a separate Now() read with NewTimer's
+	// relative duration and risk the two observing different instants (for
+	// example a concurrent Set on a FakeClock landing between the two).
+	NewTimerAt(t time.Time) Timer
 }
 
 // Timer is the subset of [time.Timer] used by the scheduler.
@@ -32,6 +39,10 @@ func (SystemClock) Now() time.Time { return time.Now() }
 
 // NewTimer wraps time.NewTimer.
 func (SystemClock) NewTimer(d time.Duration) Timer { return sysTimer{time.NewTimer(d)} }
+
+// NewTimerAt wraps time.NewTimer with the duration until t (zero or negative
+// if t has already passed, which time.Timer fires on its next tick).
+func (SystemClock) NewTimerAt(t time.Time) Timer { return sysTimer{time.NewTimer(time.Until(t))} }
 
 type sysTimer struct{ t *time.Timer }
 
@@ -69,8 +80,25 @@ func (f *FakeClock) Now() time.Time {
 func (f *FakeClock) NewTimer(d time.Duration) Timer {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	t := &fakeTimer{clock: f, deadline: f.now.Add(d), ch: make(chan time.Time, 1), active: true}
-	if d <= 0 {
+	return f.newTimerAtLocked(f.now.Add(d))
+}
+
+// NewTimerAt creates a timer that fires when the fake time reaches t, or
+// immediately if t is not after the current fake time. Deciding that and
+// arming the timer happen under the same lock as Now, so a concurrent Set or
+// Advance can never land between "what time is it" and "arm relative to
+// that time" the way it could if a caller computed a duration from a
+// separate Now() call and passed it to NewTimer.
+func (f *FakeClock) NewTimerAt(t time.Time) Timer {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.newTimerAtLocked(t)
+}
+
+// newTimerAtLocked implements NewTimer and NewTimerAt; f.mu is held.
+func (f *FakeClock) newTimerAtLocked(deadline time.Time) *fakeTimer {
+	t := &fakeTimer{clock: f, deadline: deadline, ch: make(chan time.Time, 1), active: true}
+	if !deadline.After(f.now) {
 		t.active = false
 		t.ch <- f.now
 		return t

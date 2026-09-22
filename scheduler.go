@@ -515,12 +515,12 @@ func (s *Scheduler) loop(ctx context.Context, rs *runState) {
 		var tc <-chan time.Time
 		var tm Timer
 		if ok {
-			d := next.Sub(s.clock.Now())
-			tm = s.clock.NewTimer(d)
-			if !s.clock.Now().Before(next) { // became due while arming
-				tm.Stop()
-				continue
-			}
+			// NewTimerAt decides "already due" and "arm for next" as one
+			// atomic read of the clock, so a concurrent Set/Advance can never
+			// land between computing a duration and arming a timer from it
+			// (which separate Now() and NewTimer(d) calls could not rule
+			// out: see the investigation in STATUS.md / LEARNINGS.md).
+			tm = s.clock.NewTimerAt(next)
 			tc = tm.C()
 		}
 		select {

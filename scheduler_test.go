@@ -3,6 +3,7 @@ package quartzx
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -970,5 +971,59 @@ func TestCompletedEventMeansNotRunning(t *testing.T) {
 	}
 	if n := countType(h.drain(), EventSkipped); n != 0 {
 		t.Fatalf("%d spurious overlap skips", n)
+	}
+}
+
+// TestPersistenceExampleShapeStress is a regression/stress test for the
+// investigation in STATUS.md / LEARNINGS.md: a single CI run of
+// examples/persistence once deadlocked with the scheduler's loop goroutine
+// parked in its timer-arming select and nothing left to wake it. That exact
+// deadlock was never reproduced locally (thousands of runs across two OSes,
+// including the exact failing shuffle seed pinned to two cores) and no live
+// bug was confirmed; Scheduler.loop was hardened anyway to arm its timer
+// from one atomic clock read (Clock.NewTimerAt) instead of a separate Now()
+// read plus a relative duration. This test reproduces the persistence
+// example's exact shape — FileStore, PersistData, a non-overlapping cron
+// job, BlockUntilTimers+Set gated on waiting for the run to finish — run
+// many times so the scenario that motivated the hardening has ongoing
+// coverage under -race. It must never hang (the harness's own timeout
+// enforces that) and must never trip the race detector.
+func TestPersistenceExampleShapeStress(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	store, err := NewFileStore(filepath.Join(dir, "jobs.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := newHarness(t, t0, WithStore(store))
+	h.s.RegisterFunc("h", func(_ context.Context, e Execution) error {
+		n, _ := e.Data["n"].(float64)
+		e.Data["n"] = n + 1
+		return nil
+	})
+	h.start()
+	tr := mustTrig(t)(Cron("0 * * * * ?")) // once a minute, like the example's hourly job scaled down
+	err = h.s.Schedule(context.Background(), JobSpec{
+		Key: "hourly-report", Handler: "h", Trigger: tr,
+		Data: map[string]any{"n": 0}, PersistData: true, Misfire: MisfireFireAll,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const fires = 300
+	for i := 1; i <= fires; i++ {
+		h.fc.BlockUntilTimers(1)
+		h.fc.Set(t0.Add(time.Duration(i) * time.Minute))
+		h.next(EventCompleted, "hourly-report") // blocks forever if the deadlock reappears
+	}
+	if n := countType(h.drain(), EventSkipped); n != 0 {
+		t.Fatalf("%d spurious overlap skips", n)
+	}
+	rec, err := h.s.Job("hourly-report")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.FireCount != fires {
+		t.Fatalf("FireCount = %d, want %d", rec.FireCount, fires)
 	}
 }
